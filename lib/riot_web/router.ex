@@ -53,6 +53,19 @@ defmodule RiotWeb.Router do
     end)
   end
 
+  get "/" do
+    Response.redirect(conn, "/docs")
+  end
+
+  # Interactive API docs: Swagger UI rendering priv/static/openapi.json.
+  get "/docs" do
+    Response.file(conn, "text/html", static_path("docs.html"))
+  end
+
+  get "/openapi.json" do
+    Response.file(conn, "application/json", static_path("openapi.json"))
+  end
+
   match "/:endpoint" when endpoint in @endpoints do
     Response.render(conn, {:error, :method_not_allowed})
   end
@@ -77,6 +90,8 @@ defmodule RiotWeb.Router do
       {:error, reason, conn} -> Response.render(conn, {:error, reason})
     end
   end
+
+  defp static_path(file), do: Application.app_dir(:riot, ["priv", "static", file])
 
   defp require_object(payload) when is_map(payload), do: {:ok, payload}
   defp require_object(_payload), do: {:error, :not_an_object}

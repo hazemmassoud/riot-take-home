@@ -31,6 +31,20 @@ defmodule RiotWeb.Response do
     |> send_resp(status, JSON.encode!(body))
   end
 
+  @spec file(Plug.Conn.t(), String.t(), Path.t()) :: Plug.Conn.t()
+  def file(conn, content_type, path) do
+    conn
+    |> put_resp_content_type(content_type)
+    |> send_file(200, path)
+  end
+
+  @spec redirect(Plug.Conn.t(), String.t()) :: Plug.Conn.t()
+  def redirect(conn, location) do
+    conn
+    |> put_resp_header("location", location)
+    |> send_resp(302, "")
+  end
+
   defp status_for(:payload_too_large), do: 413
   defp status_for(:not_found), do: 404
   defp status_for(:encryption_failed), do: 500

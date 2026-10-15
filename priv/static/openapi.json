@@ -1,0 +1,223 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Riot API",
+    "version": "0.1.0",
+    "description": "Encrypts, decrypts, signs and verifies JSON payloads.\n\n- **Encryption** is Base64 of each top-level value's JSON (an encoding, not real encryption, as the challenge specifies).\n- **Signatures** are HMAC-SHA256 over a canonical form of the value, so property order does not matter.\n\nThe `/verify` examples use a signature made with the **dev** signing key, so they return `204` against a local dev server (`mix run --no-halt`). Against a server with another key, sign first and paste the result."
+  },
+  "servers": [{ "url": "/" }],
+  "paths": {
+    "/encrypt": {
+      "post": {
+        "summary": "Encrypt every top-level property",
+        "description": "Each value at depth 1 is JSON-encoded and then encrypted, so its type survives a round trip through `/decrypt`. Nested values are encrypted as part of their top-level property.",
+        "operationId": "encrypt",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "type": "object" },
+              "examples": { "person": { "$ref": "#/components/examples/Person" } }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The object with every top-level value encrypted.",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object", "additionalProperties": { "type": "string" } },
+                "examples": { "person": { "$ref": "#/components/examples/EncryptedPerson" } }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" }
+        }
+      }
+    },
+    "/decrypt": {
+      "post": {
+        "summary": "Decrypt every encrypted top-level property",
+        "description": "A string is decrypted only if it is valid ciphertext *and* decrypts to valid JSON. Other values, such as `birth_date` in the second example, are returned unchanged.\n\nKnown false positive: a plain string that happens to be Base64 of valid JSON (e.g. `\"MTIz\"`) is decrypted (to `123`).",
+        "operationId": "decrypt",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "type": "object" },
+              "examples": {
+                "encrypted": { "$ref": "#/components/examples/EncryptedPerson" },
+                "mixed": {
+                  "summary": "With an unencrypted property",
+                  "value": {
+                    "name": "IkpvaG4gRG9lIg==",
+                    "age": "MzA=",
+                    "contact": "eyJlbWFpbCI6ImpvaG5AZXhhbXBsZS5jb20iLCJwaG9uZSI6IjEyMy00NTYtNzg5MCJ9",
+                    "birth_date": "1998-11-19"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The object with encrypted values decrypted.",
+            "content": {
+              "application/json": {
+                "schema": { "type": "object" },
+                "examples": { "person": { "$ref": "#/components/examples/Person" } }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" }
+        }
+      }
+    },
+    "/sign": {
+      "post": {
+        "summary": "Sign any JSON value",
+        "description": "Returns an HMAC-SHA256 signature (lowercase hex) of the value. Property order does not affect the signature; array order does.",
+        "operationId": "sign",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {},
+              "examples": {
+                "message": {
+                  "summary": "Spec example",
+                  "value": { "message": "Hello World", "timestamp": 1616161616 }
+                },
+                "reordered": {
+                  "summary": "Same value, properties reordered (same signature)",
+                  "value": { "timestamp": 1616161616, "message": "Hello World" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The signature.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["signature"],
+                  "properties": { "signature": { "type": "string", "pattern": "^[0-9a-f]{64}$" } }
+                },
+                "examples": { "devKey": { "$ref": "#/components/examples/DevSignature" } }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" }
+        }
+      }
+    },
+    "/verify": {
+      "post": {
+        "summary": "Verify a signature",
+        "description": "Returns `204` if `signature` is valid for `data`, otherwise `400`.",
+        "operationId": "verify",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["signature", "data"],
+                "properties": {
+                  "signature": { "type": "string" },
+                  "data": { "description": "Any JSON value." }
+                }
+              },
+              "examples": {
+                "valid": {
+                  "summary": "Valid (dev key)",
+                  "value": {
+                    "signature": "1b76ca91b8696a956fbdea01c1afd053356c7ca8f26ac304b28e0e60e3bffbff",
+                    "data": { "message": "Hello World", "timestamp": 1616161616 }
+                  }
+                },
+                "reordered": {
+                  "summary": "Valid, properties reordered (dev key)",
+                  "value": {
+                    "signature": "1b76ca91b8696a956fbdea01c1afd053356c7ca8f26ac304b28e0e60e3bffbff",
+                    "data": { "timestamp": 1616161616, "message": "Hello World" }
+                  }
+                },
+                "tampered": {
+                  "summary": "Tampered payload (400)",
+                  "value": {
+                    "signature": "1b76ca91b8696a956fbdea01c1afd053356c7ca8f26ac304b28e0e60e3bffbff",
+                    "data": { "timestamp": 1616161616, "message": "Goodbye World" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": { "description": "The signature is valid." },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": { "error": { "type": "string" } }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid signature, invalid JSON, duplicate object keys, or the wrong body shape.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "signature is invalid" }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "The body is over 1 MB.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "request body is too large" }
+          }
+        }
+      }
+    },
+    "examples": {
+      "Person": {
+        "summary": "Spec example",
+        "value": {
+          "name": "John Doe",
+          "age": 30,
+          "contact": { "email": "john@example.com", "phone": "123-456-7890" }
+        }
+      },
+      "EncryptedPerson": {
+        "summary": "Spec example, encrypted",
+        "value": {
+          "name": "IkpvaG4gRG9lIg==",
+          "age": "MzA=",
+          "contact": "eyJlbWFpbCI6ImpvaG5AZXhhbXBsZS5jb20iLCJwaG9uZSI6IjEyMy00NTYtNzg5MCJ9"
+        }
+      },
+      "DevSignature": {
+        "summary": "Spec example signed with the dev key",
+        "value": { "signature": "1b76ca91b8696a956fbdea01c1afd053356c7ca8f26ac304b28e0e60e3bffbff" }
+      }
+    }
+  }
+}
